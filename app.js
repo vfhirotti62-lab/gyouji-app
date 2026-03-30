@@ -370,7 +370,40 @@ function resizeImageAndGetBase64(file, maxDimension) {
     });
 }
 
+// Adjust past dates to future: if a date has already passed, bump it to next year
+function adjustPastDates(events) {
+    const now = new Date();
+    // Set to start of today for comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    function bumpDateString(dtStr) {
+        if (!dtStr) return dtStr;
+        const parsed = new Date(dtStr);
+        if (isNaN(parsed.getTime())) return dtStr;
+
+        // If the date is in the past, add 1 year
+        if (parsed < today) {
+            const parts = dtStr.split('T');
+            const dateParts = parts[0].split('-');
+            let year = parseInt(dateParts[0]);
+            year += 1;
+            dateParts[0] = String(year);
+            return dateParts.join('-') + (parts[1] ? 'T' + parts[1] : '');
+        }
+        return dtStr;
+    }
+
+    return events.map(ev => ({
+        ...ev,
+        start_time: bumpDateString(ev.start_time),
+        end_time: bumpDateString(ev.end_time)
+    }));
+}
+
 async function processImageWithGemini(base64Data, mimeType) {
+    const now = new Date();
+    const currentDateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+
     const promptText = `
 以下の画像は学校や保育園などのスケジュールや行事のお知らせです。
 画像から情報を抽出し、**必ず以下の形式のJSON配列（リスト）**で結果を返してください。複数の予定がある場合は配列内に複数含めてください。余計なマークダウンやテキストは一切不要です（純粋なJSON配列テキストのみ出力）。
@@ -385,9 +418,10 @@ async function processImageWithGemini(base64Data, mimeType) {
   }
 ]
 
+・本日は${currentDateStr}です。
+・年が書かれていない場合は、その月日が未来になる最も近い年を使ってください。例えば本日が2026年3月で、画像に2月の予定があれば2027年2月としてください。
 ・時間が不明な場合は開始時刻を08:00としてください。
 ・終了時刻が不明な場合は、開始時刻の1〜2時間後に設定するか、日付のみしかわからない場合は当日の17:00としてください。
-・今年が何年かわからない場合は現在の年（2025または2026年）を推測してください。
 `;
 
     const payload = {
@@ -438,6 +472,9 @@ async function processImageWithGemini(base64Data, mimeType) {
         if (!Array.isArray(resultJSON)) {
             resultJSON = [resultJSON];
         }
+
+        // Adjust past dates to future
+        resultJSON = adjustPastDates(resultJSON);
 
         resultsContainer.innerHTML = ''; // Clear previous
 
