@@ -370,7 +370,7 @@ function resizeImageAndGetBase64(file, maxDimension) {
     });
 }
 
-// Adjust past dates to future: if a date has already passed, bump it to next year
+// Adjust past dates to future: if a date has already passed, bump year until it's in the future
 function adjustPastDates(events) {
     const now = new Date();
     // Set to start of today for comparison
@@ -378,19 +378,21 @@ function adjustPastDates(events) {
 
     function bumpDateString(dtStr) {
         if (!dtStr) return dtStr;
-        const parsed = new Date(dtStr);
-        if (isNaN(parsed.getTime())) return dtStr;
+        const parts = dtStr.split('T');
+        const dateParts = parts[0].split('-');
+        if (dateParts.length < 3) return dtStr;
 
-        // If the date is in the past, add 1 year
-        if (parsed < today) {
-            const parts = dtStr.split('T');
-            const dateParts = parts[0].split('-');
-            let year = parseInt(dateParts[0]);
+        let year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1; // 0-indexed
+        const day = parseInt(dateParts[2]);
+
+        // Keep adding years until the date is today or in the future
+        while (new Date(year, month, day) < today) {
             year += 1;
-            dateParts[0] = String(year);
-            return dateParts.join('-') + (parts[1] ? 'T' + parts[1] : '');
         }
-        return dtStr;
+
+        dateParts[0] = String(year);
+        return dateParts.join('-') + (parts[1] ? 'T' + parts[1] : '');
     }
 
     return events.map(ev => ({
